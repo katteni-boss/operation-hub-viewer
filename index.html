@@ -1,0 +1,1125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+  <title>Operation Hub Universal Viewer</title>
+  <!-- Telegram Web App SDK -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <!-- Pako In-Memory Deflate/Inflate -->
+  <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
+  <!-- Mermaid Diagram Renderer -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    :root {
+      --bg-color: #17212b;
+      --surface-color: #242f3d;
+      --surface-alt: #1e2c3a;
+      --border-color: #2b5278;
+      --accent-color: #5288c1;
+      --accent-hover: #659bd6;
+      --accent-active: #416f9f;
+      --text-main: #ffffff;
+      --text-muted: #8ea3b8;
+      --highlight: #2b5278;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, "Noto Sans Thai", sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      font-family: var(--font-sans);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    header {
+      background-color: var(--surface-color);
+      border-bottom: 1px solid var(--border-color);
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+
+    .brand-icon {
+      font-size: 18px;
+    }
+
+    .brand-title {
+      color: var(--text-main);
+    }
+
+    .header-badges {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .badge {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 12px;
+      background: var(--surface-alt);
+      color: var(--accent-color);
+      border: 1px solid var(--border-color);
+      font-weight: 600;
+    }
+
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    /* Loading and Error states */
+    .status-overlay {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+      text-align: center;
+      gap: 14px;
+      flex: 1;
+    }
+
+    .spinner {
+      width: 36px;
+      height: 36px;
+      border: 3px solid rgba(82, 136, 193, 0.2);
+      border-top-color: var(--accent-color);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .error-card {
+      background: var(--surface-color);
+      border: 1px solid #e53935;
+      border-radius: 8px;
+      padding: 20px;
+      max-width: 500px;
+      width: 100%;
+      color: #ff8a80;
+    }
+
+    .empty-card {
+      background: var(--surface-color);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 24px;
+      max-width: 600px;
+      width: 100%;
+      text-align: left;
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 8px;
+      margin-top: 14px;
+      flex-wrap: wrap;
+    }
+
+    /* Common Buttons */
+    .btn {
+      background-color: var(--accent-color);
+      color: #ffffff;
+      border: none;
+      padding: 6px 12px;
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.15s ease, transform 0.1s ease;
+      user-select: none;
+    }
+
+    .btn:hover { background-color: var(--accent-hover); }
+    .btn:active { transform: scale(0.97); background-color: var(--accent-active); }
+
+    .btn-secondary {
+      background-color: var(--surface-alt);
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+    }
+    .btn-secondary:hover {
+      background-color: var(--surface-color);
+      border-color: var(--accent-color);
+    }
+
+    /* Mermaid Diagram Container */
+    #mermaid-container {
+      flex: 1;
+      display: none;
+      flex-direction: column;
+      position: relative;
+      height: calc(100vh - 53px);
+      overflow: hidden;
+    }
+
+    .toolbar {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      z-index: 50;
+      display: flex;
+      gap: 6px;
+      background: rgba(36, 47, 61, 0.85);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 4px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    }
+
+    .toolbar-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-main);
+      width: 32px;
+      height: 32px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+
+    .toolbar-btn:hover { background: var(--surface-alt); color: var(--accent-color); }
+    .toolbar-btn:active { transform: scale(0.92); }
+
+    .zoom-badge {
+      font-size: 11px;
+      font-family: var(--font-mono);
+      display: flex;
+      align-items: center;
+      padding: 0 6px;
+      color: var(--text-muted);
+      min-width: 44px;
+      justify-content: center;
+    }
+
+    #diagram-viewport {
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      cursor: grab;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle, #1a2530 1px, transparent 1px);
+      background-size: 20px 20px;
+    }
+
+    #diagram-viewport:active {
+      cursor: grabbing;
+    }
+
+    #diagram-content {
+      transform-origin: center center;
+      transition: transform 0.05s ease-out;
+      will-change: transform;
+      padding: 40px;
+      display: inline-block;
+    }
+
+    #diagram-content svg {
+      max-width: none !important;
+      height: auto !important;
+      filter: drop-shadow(0 4px 16px rgba(0, 0, 0, 0.35));
+    }
+
+    /* Table Container */
+    #table-container {
+      flex: 1;
+      display: none;
+      flex-direction: column;
+      padding: 16px;
+      gap: 12px;
+      max-width: 1200px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    .table-controls {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--surface-color);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 10px 14px;
+    }
+
+    .search-wrapper {
+      position: relative;
+      flex: 1;
+      min-width: 220px;
+    }
+
+    .search-input {
+      width: 100%;
+      background: var(--bg-color);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 8px 12px 8px 34px;
+      color: var(--text-main);
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.15s ease;
+    }
+
+    .search-input:focus {
+      border-color: var(--accent-color);
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 14px;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+
+    .table-stats {
+      font-size: 12px;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    .table-wrapper {
+      background: var(--surface-color);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      overflow-x: auto;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      text-align: left;
+    }
+
+    thead {
+      background: var(--surface-alt);
+      border-bottom: 2px solid var(--border-color);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    th {
+      padding: 12px 14px;
+      color: var(--accent-color);
+      font-weight: 600;
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
+      transition: background 0.15s ease;
+    }
+
+    th:hover {
+      background: rgba(82, 136, 193, 0.12);
+    }
+
+    th .sort-icon {
+      font-size: 10px;
+      margin-left: 6px;
+      color: var(--text-muted);
+    }
+
+    th.sorted .sort-icon {
+      color: var(--accent-color);
+    }
+
+    td {
+      padding: 10px 14px;
+      border-bottom: 1px solid rgba(43, 82, 120, 0.4);
+      color: #e2e8f0;
+      vertical-align: top;
+      word-break: break-word;
+    }
+
+    tbody tr:nth-child(even) {
+      background: rgba(30, 44, 58, 0.5);
+    }
+
+    tbody tr:hover {
+      background: rgba(82, 136, 193, 0.15);
+    }
+
+    /* Mobile Card View for Tables */
+    .cards-grid {
+      display: none;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .data-card {
+      background: var(--surface-color);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 12px 14px;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    }
+
+    .data-card-title {
+      font-weight: 600;
+      color: #ffffff;
+      font-size: 14px;
+      margin-bottom: 8px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .data-card-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 12px;
+      padding: 4px 0;
+    }
+
+    .data-card-label {
+      color: var(--text-muted);
+      font-weight: 500;
+      min-width: 80px;
+    }
+
+    .data-card-val {
+      color: #e2e8f0;
+      text-align: right;
+      word-break: break-word;
+    }
+
+    /* Modal Code Viewer */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+      z-index: 200;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+
+    .modal-card {
+      background: var(--surface-color);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      max-width: 700px;
+      width: 100%;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    }
+
+    .modal-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .modal-body {
+      padding: 14px 16px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .code-view {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 1.5;
+      color: #e2e8f0;
+      background: var(--bg-color);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 12px;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    @media (max-width: 600px) {
+      .toolbar { top: auto; bottom: 16px; right: 50%; transform: translateX(50%); }
+      #table-container { padding: 10px; }
+      .table-controls { flex-direction: column; align-items: stretch; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <span class="brand-icon" id="view-icon">⚡</span>
+      <span class="brand-title" id="view-title">Operation Hub Viewer</span>
+    </div>
+    <div class="header-badges">
+      <span class="badge" id="type-badge">StandAlone</span>
+      <button class="btn btn-secondary" id="raw-code-btn" style="display:none; padding: 4px 8px; font-size: 11px;" onclick="openCodeModal()">Code</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Status Overlay -->
+    <div id="status-box" class="status-overlay">
+      <div class="spinner" id="status-spinner"></div>
+      <div id="status-msg" style="font-size: 14px; color: var(--text-muted);">Decompressing payload in client memory...</div>
+      
+      <!-- Empty State -->
+      <div id="empty-state" class="empty-card" style="display:none;">
+        <h3 style="color: var(--accent-color); margin-bottom: 8px;">Universal Standalone Viewer</h3>
+        <p style="font-size: 13px; color: var(--text-muted); line-height: 1.5;">
+          No payload detected in URL fragment. To inspect diagrams or tables, open via link from Telegram containing <code>#pako:&lt;b64url&gt;</code> or try one of the instant interactive samples below:
+        </p>
+        <div class="btn-group">
+          <button class="btn" onclick="loadSampleMermaid()">Load Sample Diagram</button>
+          <button class="btn btn-secondary" onclick="loadSampleTable()">Load Sample Table</button>
+        </div>
+      </div>
+
+      <!-- Error State -->
+      <div id="error-state" class="error-card" style="display:none;">
+        <h4 style="margin-bottom: 6px;">Rendering Error</h4>
+        <div id="error-details" style="font-size: 13px; font-family: var(--font-mono); white-space: pre-wrap;"></div>
+      </div>
+    </div>
+
+    <!-- Mermaid Viewport -->
+    <div id="mermaid-container">
+      <div class="toolbar">
+        <button class="toolbar-btn" title="Zoom In" onclick="zoomIn()">＋</button>
+        <div class="zoom-badge" id="zoom-level">100%</div>
+        <button class="toolbar-btn" title="Zoom Out" onclick="zoomOut()">－</button>
+        <button class="toolbar-btn" title="Reset View" onclick="resetZoom()">⛶</button>
+        <button class="toolbar-btn" title="Download High-Res SVG" onclick="downloadSVG()">📥</button>
+      </div>
+      <div id="diagram-viewport">
+        <div id="diagram-content"></div>
+      </div>
+    </div>
+
+    <!-- Table View -->
+    <div id="table-container">
+      <div class="table-controls">
+        <div class="search-wrapper">
+          <span class="search-icon">🔍</span>
+          <input type="text" class="search-input" id="table-search" placeholder="Search rows in real-time..." oninput="handleSearch(this.value)">
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <span class="table-stats" id="table-stats">0 rows</span>
+          <button class="btn btn-secondary" id="view-mode-btn" onclick="toggleTableMode()">📱 Cards</button>
+          <button class="btn" onclick="exportCSV()">📥 Export CSV</button>
+        </div>
+      </div>
+
+      <div class="table-wrapper" id="table-desktop-wrapper">
+        <table id="data-table">
+          <thead id="table-head"></thead>
+          <tbody id="table-body"></tbody>
+        </table>
+      </div>
+
+      <div class="cards-grid" id="table-cards-wrapper"></div>
+    </div>
+  </main>
+
+  <!-- Modal for Raw Code -->
+  <div class="modal-overlay" id="code-modal" onclick="closeCodeModal(event)">
+    <div class="modal-card">
+      <div class="modal-header">
+        <span style="font-weight:600; font-size:13px;">Raw Payload / Code</span>
+        <button class="btn btn-secondary" style="padding: 2px 8px; font-size:12px;" onclick="closeCodeModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <pre class="code-view" id="modal-code-view"></pre>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- Telegram WebApp SDK Initialization ---
+    if (window.Telegram && window.Telegram.WebApp) {
+      try {
+        const tg = window.Telegram.WebApp;
+        tg.ready();
+        tg.expand();
+        if (tg.setHeaderColor) tg.setHeaderColor('#17212b');
+        if (tg.setBackgroundColor) tg.setBackgroundColor('#17212b');
+      } catch (e) {
+        console.warn('Telegram WebApp init warning:', e);
+      }
+    }
+
+    // --- State Variables ---
+    let rawPayloadText = '';
+    let parsedTableData = null;
+    let filteredTableRows = [];
+    let currentSortCol = -1;
+    let currentSortAsc = true;
+    let isCardMode = false;
+
+    // Panzoom State
+    let scale = 1;
+    let translateX = 0;
+    let translateY = 0;
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+    let touchStartDist = 0;
+    let touchStartScale = 1;
+
+    // --- Mermaid Dark Theme Config ---
+    const MERMAID_DARK_THEME = {
+      theme: 'base',
+      themeVariables: {
+        darkMode: true,
+        background: '#17212b',
+        mainBkg: '#242f3d',
+        nodeBorder: '#2b5278',
+        textColor: '#ffffff',
+        titleColor: '#5288c1',
+        lineColor: '#6ab2f2',
+        primaryColor: '#242f3d',
+        primaryTextColor: '#ffffff',
+        primaryBorderColor: '#2b5278',
+        secondaryColor: '#1e2c3a',
+        tertiaryColor: '#17212b'
+      },
+      securityLevel: 'loose'
+    };
+
+    if (window.mermaid) {
+      mermaid.initialize({ startOnLoad: false, ...MERMAID_DARK_THEME });
+    }
+
+    // --- Base64URL to Uint8Array ---
+    function base64UrlToUint8Array(b64url) {
+      let b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
+      while (b64.length % 4 !== 0) b64 += '=';
+      const binary = atob(b64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      return bytes;
+    }
+
+    // --- Decompressor (Pako + Native DecompressionStream fallback) ---
+    async function decompress(b64url) {
+      const bytes = base64UrlToUint8Array(b64url);
+      // 1. Try Pako inflate
+      if (window.pako && typeof window.pako.inflate === 'function') {
+        try {
+          return window.pako.inflate(bytes, { to: 'string' });
+        } catch (err) {
+          console.warn('Pako inflate fallback:', err);
+        }
+      }
+      // 2. Native DecompressionStream ('deflate' for zlib)
+      if (typeof DecompressionStream !== 'undefined') {
+        try {
+          const ds = new DecompressionStream('deflate');
+          const stream = new Response(bytes).body.pipeThrough(ds);
+          return await new Response(stream).text();
+        } catch (e1) {
+          try {
+            const dsRaw = new DecompressionStream('deflate-raw');
+            const stream = new Response(bytes).body.pipeThrough(dsRaw);
+            return await new Response(stream).text();
+          } catch (e2) {
+            throw new Error('DecompressionStream failed: ' + e2.message);
+          }
+        }
+      }
+      throw new Error('No decompression library available.');
+    }
+
+    // --- Content Type Detection ---
+    function isMermaidContent(text) {
+      const trimmed = text.trim();
+      return /^\s*(graph\s|graph\n|flowchart\s|flowchart\n|sequenceDiagram|classDiagram|stateDiagram|erDiagram|gantt|pie|gitGraph|journey|mindmap|timeline|quadrantChart|subgraph\b)/m.test(trimmed);
+    }
+
+    function isTableContent(text) {
+      const lines = text.trim().split(/\r?\n/).filter(l => l.trim().length > 0);
+      if (lines.length < 2) return false;
+      const pipeCount = (lines[0].match(/\|/g) || []).length;
+      return pipeCount >= 2;
+    }
+
+    // --- Panzoom Controls ---
+    function updateTransform() {
+      const target = document.getElementById('diagram-content');
+      if (target) {
+        target.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+      }
+      const badge = document.getElementById('zoom-level');
+      if (badge) badge.textContent = `${Math.round(scale * 100)}%`;
+    }
+
+    function zoomIn() {
+      scale = Math.min(scale * 1.25, 8);
+      updateTransform();
+    }
+
+    function zoomOut() {
+      scale = Math.max(scale / 1.25, 0.2);
+      updateTransform();
+    }
+
+    function resetZoom() {
+      scale = 1;
+      translateX = 0;
+      translateY = 0;
+      updateTransform();
+    }
+
+    function setupPanzoomEvents() {
+      const vp = document.getElementById('diagram-viewport');
+      if (!vp) return;
+
+      vp.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const factor = e.deltaY < 0 ? 1.15 : 0.87;
+        const newScale = Math.min(Math.max(scale * factor, 0.2), 8);
+        const rect = vp.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left - rect.width / 2;
+        const mouseY = e.clientY - rect.top - rect.height / 2;
+        translateX = mouseX - (mouseX - translateX) * (newScale / scale);
+        translateY = mouseY - (mouseY - translateY) * (newScale / scale);
+        scale = newScale;
+        updateTransform();
+      }, { passive: false });
+
+      vp.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        isDragging = true;
+        startX = e.clientX - translateX;
+        startY = e.clientY - translateY;
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        translateX = e.clientX - startX;
+        translateY = e.clientY - startY;
+        updateTransform();
+      });
+
+      window.addEventListener('mouseup', () => { isDragging = false; });
+
+      vp.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 1) {
+          isDragging = true;
+          startX = e.touches[0].clientX - translateX;
+          startY = e.touches[0].clientY - translateY;
+        } else if (e.touches.length === 2) {
+          isDragging = false;
+          touchStartDist = Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY
+          );
+          touchStartScale = scale;
+        }
+      }, { passive: true });
+
+      vp.addEventListener('touchmove', (e) => {
+        if (e.touches.length === 1 && isDragging) {
+          translateX = e.touches[0].clientX - startX;
+          translateY = e.touches[0].clientY - startY;
+          updateTransform();
+        } else if (e.touches.length === 2 && touchStartDist > 0) {
+          const dist = Math.hypot(
+            e.touches[0].clientX - e.touches[1].clientX,
+            e.touches[0].clientY - e.touches[1].clientY
+          );
+          scale = Math.min(Math.max(touchStartScale * (dist / touchStartDist), 0.2), 8);
+          updateTransform();
+        }
+      }, { passive: true });
+
+      vp.addEventListener('touchend', () => {
+        isDragging = false;
+        touchStartDist = 0;
+      });
+    }
+
+    function downloadSVG() {
+      const svg = document.querySelector('#diagram-content svg');
+      if (!svg) return;
+      const svgData = new XMLSerializer().serializeToString(svg);
+      const blob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `diagram_${Date.now()}.svg`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    // --- Renderers ---
+    async function renderMermaid(code, customTheme) {
+      document.getElementById('view-icon').textContent = '📊';
+      document.getElementById('view-title').textContent = 'Architecture Diagram';
+      document.getElementById('type-badge').textContent = 'Mermaid';
+      document.getElementById('raw-code-btn').style.display = 'inline-flex';
+
+      const container = document.getElementById('mermaid-container');
+      const content = document.getElementById('diagram-content');
+      container.style.display = 'flex';
+      document.getElementById('table-container').style.display = 'none';
+
+      try {
+        if (customTheme && window.mermaid) {
+          mermaid.initialize({ startOnLoad: false, ...customTheme });
+        }
+        content.innerHTML = '';
+        const id = 'mermaid-svg-' + Date.now();
+        const { svg } = await mermaid.render(id, code.trim());
+        content.innerHTML = svg;
+        resetZoom();
+        setupPanzoomEvents();
+        hideStatus();
+      } catch (err) {
+        showError('Mermaid Syntax / Render Error:\n' + (err.message || String(err)));
+      }
+    }
+
+    function parseMarkdownTable(text) {
+      const lines = text.trim().split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      if (lines.length < 2) return null;
+      const rows = [];
+      for (const line of lines) {
+        if (!line.includes('|')) continue;
+        const clean = line.replace(/^\||\|$/g, '');
+        const cols = clean.split('|').map(c => c.trim());
+        const isSep = cols.every(c => /^:?-+:?$/.test(c));
+        if (!isSep) rows.push(cols);
+      }
+      if (rows.length < 1) return null;
+      return {
+        headers: rows[0],
+        rows: rows.slice(1)
+      };
+    }
+
+    function renderTable(tableData) {
+      parsedTableData = tableData;
+      filteredTableRows = [...tableData.rows];
+
+      document.getElementById('view-icon').textContent = '📋';
+      document.getElementById('view-title').textContent = 'Interactive Data Table';
+      document.getElementById('type-badge').textContent = `${tableData.rows.length} Rows`;
+      document.getElementById('raw-code-btn').style.display = 'inline-flex';
+
+      document.getElementById('mermaid-container').style.display = 'none';
+      document.getElementById('table-container').style.display = 'flex';
+
+      // Build Headers
+      const thead = document.getElementById('table-head');
+      thead.innerHTML = '';
+      const tr = document.createElement('tr');
+      tableData.headers.forEach((h, idx) => {
+        const th = document.createElement('th');
+        th.innerHTML = `${escapeHtml(h)} <span class="sort-icon" id="sort-${idx}">↕</span>`;
+        th.onclick = () => sortTable(idx);
+        tr.appendChild(th);
+      });
+      thead.appendChild(tr);
+
+      renderTableRows();
+      hideStatus();
+    }
+
+    function renderTableRows() {
+      const tbody = document.getElementById('table-body');
+      const cardsGrid = document.getElementById('table-cards-wrapper');
+      tbody.innerHTML = '';
+      cardsGrid.innerHTML = '';
+
+      document.getElementById('table-stats').textContent = `Showing ${filteredTableRows.length} of ${parsedTableData.rows.length} rows`;
+
+      filteredTableRows.forEach(row => {
+        // Table row
+        const tr = document.createElement('tr');
+        parsedTableData.headers.forEach((_, cIdx) => {
+          const td = document.createElement('td');
+          td.textContent = row[cIdx] !== undefined ? row[cIdx] : '';
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+
+        // Mobile card
+        const card = document.createElement('div');
+        card.className = 'data-card';
+        const titleText = row[0] || 'Item';
+        let cardHtml = `<div class="data-card-title">📌 ${escapeHtml(titleText)}</div>`;
+        parsedTableData.headers.slice(1).forEach((h, i) => {
+          const val = row[i + 1] !== undefined ? row[i + 1] : '-';
+          cardHtml += `
+            <div class="data-card-row">
+              <span class="data-card-label">${escapeHtml(h)}</span>
+              <span class="data-card-val">${escapeHtml(val)}</span>
+            </div>`;
+        });
+        card.innerHTML = cardHtml;
+        cardsGrid.appendChild(card);
+      });
+    }
+
+    function handleSearch(query) {
+      if (!parsedTableData) return;
+      const q = query.toLowerCase().trim();
+      if (!q) {
+        filteredTableRows = [...parsedTableData.rows];
+      } else {
+        filteredTableRows = parsedTableData.rows.filter(r =>
+          r.some(cell => String(cell).toLowerCase().includes(q))
+        );
+      }
+      renderTableRows();
+    }
+
+    function sortTable(colIdx) {
+      if (currentSortCol === colIdx) {
+        currentSortAsc = !currentSortAsc;
+      } else {
+        currentSortCol = colIdx;
+        currentSortAsc = true;
+      }
+
+      parsedTableData.headers.forEach((_, idx) => {
+        const icon = document.getElementById(`sort-${idx}`);
+        if (icon) icon.textContent = idx === colIdx ? (currentSortAsc ? '▲' : '▼') : '↕';
+      });
+
+      filteredTableRows.sort((a, b) => {
+        const valA = (a[colIdx] || '').trim();
+        const valB = (b[colIdx] || '').trim();
+        const numA = Number(valA.replace(/,/g, ''));
+        const numB = Number(valB.replace(/,/g, ''));
+        if (!isNaN(numA) && !isNaN(numB) && valA !== '' && valB !== '') {
+          return currentSortAsc ? numA - numB : numB - numA;
+        }
+        return currentSortAsc ? valA.localeCompare(valB) : valB.localeCompare(valA);
+      });
+
+      renderTableRows();
+    }
+
+    function toggleTableMode() {
+      isCardMode = !isCardMode;
+      const dWrapper = document.getElementById('table-desktop-wrapper');
+      const cWrapper = document.getElementById('table-cards-wrapper');
+      const btn = document.getElementById('view-mode-btn');
+      if (isCardMode) {
+        dWrapper.style.display = 'none';
+        cWrapper.style.display = 'flex';
+        btn.textContent = '📊 Table';
+      } else {
+        dWrapper.style.display = 'block';
+        cWrapper.style.display = 'none';
+        btn.textContent = '📱 Cards';
+      }
+    }
+
+    function exportCSV() {
+      if (!parsedTableData) return;
+      const rows = [parsedTableData.headers, ...filteredTableRows];
+      const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+      const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `table_export_${Date.now()}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    // --- Modal Controls ---
+    function openCodeModal() {
+      document.getElementById('modal-code-view').textContent = rawPayloadText;
+      document.getElementById('code-modal').style.display = 'flex';
+    }
+
+    function closeCodeModal(e) {
+      if (!e || e.target.id === 'code-modal' || e.target.tagName === 'BUTTON') {
+        document.getElementById('code-modal').style.display = 'none';
+      }
+    }
+
+    // --- Utility Helpers ---
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function showStatus(msg) {
+      const box = document.getElementById('status-box');
+      box.style.display = 'flex';
+      document.getElementById('status-spinner').style.display = 'block';
+      document.getElementById('status-msg').textContent = msg;
+      document.getElementById('empty-state').style.display = 'none';
+      document.getElementById('error-state').style.display = 'none';
+    }
+
+    function hideStatus() {
+      document.getElementById('status-box').style.display = 'none';
+    }
+
+    function showError(msg) {
+      document.getElementById('status-box').style.display = 'flex';
+      document.getElementById('status-spinner').style.display = 'none';
+      document.getElementById('status-msg').textContent = '';
+      document.getElementById('empty-state').style.display = 'none';
+      const errBox = document.getElementById('error-state');
+      errBox.style.display = 'block';
+      document.getElementById('error-details').textContent = msg;
+    }
+
+    function showEmpty() {
+      document.getElementById('status-box').style.display = 'flex';
+      document.getElementById('status-spinner').style.display = 'none';
+      document.getElementById('status-msg').textContent = '';
+      document.getElementById('empty-state').style.display = 'block';
+      document.getElementById('error-state').style.display = 'none';
+    }
+
+    // --- Main Dispatcher ---
+    async function processHash() {
+      const hash = window.location.hash.slice(1);
+      if (!hash) {
+        showEmpty();
+        return;
+      }
+
+      let b64 = '';
+      if (hash.startsWith('pako:')) b64 = hash.slice(5);
+      else if (hash.startsWith('pako=')) b64 = hash.slice(5);
+      else if (hash.startsWith('share:')) b64 = hash.slice(6);
+      else if (hash.startsWith('share=')) b64 = hash.slice(6);
+      else if (hash.includes(':')) b64 = hash.split(':')[1];
+      else if (hash.includes('=')) b64 = hash.split('=')[1];
+      else b64 = hash;
+
+      b64 = b64.trim();
+      if (!b64) {
+        showEmpty();
+        return;
+      }
+
+      showStatus('Decompressing payload...');
+      try {
+        const decompressed = await decompress(b64);
+        rawPayloadText = decompressed;
+
+        // Check if payload is wrapped in Mermaid.live JSON state
+        let content = decompressed;
+        let customTheme = null;
+        try {
+          const parsed = JSON.parse(decompressed);
+          if (parsed && typeof parsed === 'object') {
+            if (parsed.code) content = parsed.code;
+            if (parsed.mermaid) {
+              customTheme = typeof parsed.mermaid === 'string' ? JSON.parse(parsed.mermaid) : parsed.mermaid;
+            }
+          }
+        } catch (_) {
+          // Not JSON, treat as raw text
+        }
+
+        if (isMermaidContent(content)) {
+          await renderMermaid(content, customTheme);
+        } else if (isTableContent(content)) {
+          const tableData = parseMarkdownTable(content);
+          if (tableData) {
+            renderTable(tableData);
+          } else {
+            showError('Could not parse table structure.');
+          }
+        } else {
+          // Fallback: display in code view
+          document.getElementById('diagram-content').innerHTML = `<pre class="code-view">${escapeHtml(content)}</pre>`;
+          document.getElementById('mermaid-container').style.display = 'flex';
+          hideStatus();
+        }
+      } catch (err) {
+        showError('Payload Decompression Failed:\n' + (err.message || String(err)));
+      }
+    }
+
+    // --- Sample Demos ---
+    function loadSampleMermaid() {
+      const sample = `graph TD\n  User([User / Developer]) -->|Directives| Commander[Fleet Commander]\n  Commander --> Researcher[Researcher: Recon]\n  Commander --> Architect[Architect: Design]\n  Commander --> Implementer[Implementer: Code]\n  Commander --> Reviewer[Reviewer: QA]\n  Implementer --> WebApp[Standalone WebApp]`;
+      rawPayloadText = sample;
+      renderMermaid(sample);
+    }
+
+    function loadSampleTable() {
+      const sample = `| Subagent | Role | Primary Charter | Status |\n|:---|:---|:---|:---:|\n| fleet-manager | Fleet Commander | Task decomposition and dispatching | Active |\n| researcher | Universal Scout | Read-only discovery & probes | Active |\n| architect | Structural Architect | Schema contracts & module bounds | Active |\n| implementer | Software Engineer | 4-Tier Pure Functional authoring | Active |\n| reviewer | Quality Sentinel | Test suite sovereignty & regression | Active |`;
+      rawPayloadText = sample;
+      renderTable(parseMarkdownTable(sample));
+    }
+
+    // Hash listener
+    window.addEventListener('hashchange', processHash);
+    window.addEventListener('DOMContentLoaded', processHash);
+  </script>
+</body>
+</html>
